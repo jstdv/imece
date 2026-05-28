@@ -1,0 +1,177 @@
+version: "3.9"
+
+# ── imece — Docker Compose ─────────────────────────────────
+# Deploy via: docker compose up -d
+#
+# Before starting:
+# 1. Create project folder and upload code
+# 2. Run: docker compose up -d
+# ──────────────────────────────────────────────────────────────
+
+services:
+
+  # ── Coordination Layer ─────────────────────────────────────
+  coordination:
+    image: python:3.9-slim
+    container_name: imece-coordination
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+#      - OLLAMA_URL=http://ollama:11434
+    volumes:
+      - ./:/app
+    working_dir: /app
+    command: >
+      sh -c "pip install -r coordination/requirements.txt --quiet &&
+             uvicorn coordination.main:app --host 0.0.0.0 --port 8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+#      ollama:
+#        condition: service_started
+    restart: unless-stopped
+    networks:
+      - imece-network
+
+  # ── Ollama (Fallback Inference) ───────────────────────────
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: imece-ollama
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - imece-ollama-data:/root/.ollama
+  #   restart: unless-stopped
+  #   networks:
+  #     - imece-network
+
+  # ── Shard Node A — layers 0-15 ────────────────────────────
+  shard-node-a:
+    image: python:3.9-slim
+    container_name: imece-shard-a
+    ports:
+      - "8010:8010"
+    environment:
+      - SHARD_NODE_ID=${SHARD_A_NODE_ID:-shard-node-a}
+      - SHARD_HOST=shard-node-a
+      - SHARD_PORT=8010
+      - SHARD_LAYER_START=0
+      - SHARD_LAYER_END=15
+    volumes:
+      - ./:/app
+    working_dir: /app
+    command: >
+      sh -c "pip install fastapi uvicorn pydantic requests --quiet &&
+            uvicorn inference.main:app --host 0.0.0.0 --port 8010"
+    depends_on:
+     - coordination
+    restart: unless-stopped
+    networks:
+      - imece-network
+
+  # ── Shard Node B — layers 16-31 ───────────────────────────
+  shard-node-b:
+    image: python:3.9-slim
+    container_name: imece-shard-b
+    ports:
+      - "8011:8011"
+    environment:
+      - SHARD_NODE_ID=${SHARD_B_NODE_ID:-shard-node-b}
+      - SHARD_HOST=shard-node-b
+      - SHARD_PORT=8011
+      - SHARD_LAYER_START=16
+      - SHARD_LAYER_END=31
+    volumes:
+      - ./:/app
+    working_dir: /app
+    command: >
+      sh -c "pip install fastapi uvicorn pydantic requests --quiet &&
+            uvicorn inference.main:app --host 0.0.0.0 --port 8011"
+    depends_on:
+      - coordination
+    restart: unless-stopped
+    networks:
+      - imece-network
+
+  # ── PostgreSQL ─────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: imece-postgres
+    ports:
+      - "5433:5432"
+    environment:
+      - POSTGRES_USER=ceuser
+      - POSTGRES_PASSWORD=cepass
+      - POSTGRES_DB=imece
+    volumes:
+      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - imece-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ceuser -d imece"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - imece-network
+
+  # ── Redis ──────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: imece-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - imece-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - imece-network
+
+  # ── pgAdmin (Database browser) ─────────────────────────────
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: imece-pgadmin
+    ports:
+      - "5050:80"
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@imece.dev
+      - PGADMIN_DEFAULT_PASSWORD=admin
+    volumes:
+      - imece-pgadmin-data:/var/lib/pgadmin
+    depends_on:
+      - postgres
+    restart: unless-stopped
+    networks:
+      - imece-network
+
+  # ── Redis Commander (Redis browser) ───────────────────────
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: imece-redis-commander
+    ports:
+      - "8081:8081"
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    depends_on:
+      - redis
+    restart: unless-stopped
+    networks:
+      - imece-network
+
+volumes:
+  imece-postgres-data:
+  imece-redis-data:
+  imece-pgadmin-data:
+#  imece-ollama-data:
+
+networks:
+  imece-network:
+    driver: bridge
