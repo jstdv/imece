@@ -119,14 +119,14 @@ Where L = grid load, C = carbon intensity, R = renewable fraction. Tasks are pre
            |                                    ^
            | activations                        |
            v                                    |
-+---------------------+                        |
-|  Contributor Nodes  |                        |
-|  - Benchmark        |                        |
-|  - Serve layers     |                        |
-|  - Earn GFT         |                        |
-+---------------------+                        |
-                                               |
-                    +--------------------------+
++---------------------+                         |
+|  Contributor Nodes  |                         |
+|  - Benchmark        |                         |
+|  - Serve layers     |                         |
+|  - Earn GFT         |                         |
++---------------------+                         |
+                                                |
+                    +---------------------------+
                     |
                     v
            +----------------------+
