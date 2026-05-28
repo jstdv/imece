@@ -93,7 +93,7 @@ Where L = grid load, C = carbon intensity, R = renewable fraction. Tasks are pre
 ---
 
 ## General Diagram
-
+```
                  +----------------------+
                  |      User / DApp     |
                  |  (requests inference)|
@@ -134,7 +134,7 @@ Where L = grid load, C = carbon intensity, R = renewable fraction. Tasks are pre
            | - GFT balances       |
            | - Hash-chained log   |
            +----------------------+
-
+```
 
 ---
 
